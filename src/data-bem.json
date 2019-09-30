@@ -1,0 +1,29 @@
+{
+  "shop-history": {
+    "offer-id": "sur-FpZwIOEIWCFmqaqA5w",
+    "currency": "RUR",
+    "gate": "",
+    "isRecommended": "",
+    "clickParams": {
+      "event": "clickout",
+      "goodid": "sur-FpZwIOEIWCFmqaqA5w",
+      "goodbrand": 240936,
+      "productid": "",
+      "store": 37896,
+      "price": "77300",
+      "categoryId": 90578
+    }
+  },
+  "n-snippet-card": {
+    "type": "offer",
+    "clickActionType": "details"
+  },
+  "b-zone": {
+    "name": "snippet-card",
+    "data": {
+      "isCpa20": false,
+      "id": "sur-FpZwIOEIWCFmqaqA5w",
+      "isAutoCalculatedDelivery": false
+    }
+  }
+}
