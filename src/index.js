@@ -1,14 +1,13 @@
 // import "reflect-metadata";
 // import {createConnection} from "typeorm";
-const {getDesiredProductsFromFile} = require( "./getDesiredProductsFromFile");
-// import {getDesiredProductsFromFile} from "./getDesiredProductsFromFile";
-const filename = 'input-conditioner';
 const {mapSeries,filterSeries} = require( 'async');
 const {getProductInfo} =require( "./getProductInfo");
 const {Builder, By, Key, until} = require('selenium-webdriver');
-const {addToCsv} = require('./addToCsv');
-const fs = require('fs').promises;
-const file='output.csv';
+const chrome = require('selenium-webdriver/chrome');
+
+const {getDesiredProductsFromFile} = require( "./getDesiredProductsFromFile");
+
+const filename = 'input.txt';
 
 
 

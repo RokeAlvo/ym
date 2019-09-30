@@ -1,3 +1,5 @@
+const fs = require('fs').promises;
+
 exports.getDesiredProductsFromFile = async (filename) => {
     const file = await fs.open(filename);
     const buffer = await file.readFile();

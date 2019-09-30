@@ -1,80 +1,138 @@
-"use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-    function verb(n) { return function (v) { return step([n, v]); }; }
-    function step(op) {
-        if (f) throw new TypeError("Generator is already executing.");
-        while (_) try {
-            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [op[0] & 2, t.value];
-            switch (op[0]) {
-                case 0: case 1: t = op; break;
-                case 4: _.label++; return { value: op[1], done: false };
-                case 5: _.label++; y = op[1]; op = [0]; continue;
-                case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                default:
-                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                    if (t[2]) _.ops.pop();
-                    _.trys.pop(); continue;
+const {addRowToCsv} = require('./addToCsv');
+const {mapSeries, filterSeries} = require('async');
+const {Builder, By, Key, until} = require('selenium-webdriver');
+
+const URL = 'https://market.yandex.ru/?pcr=65&contentRegion=213';
+
+
+exports.getProductInfo = function (driver) {
+    // helper init
+    const selectAll = findAll(driver);
+    const select = find(driver);
+    // const getAttribute = getAttr(driver);
+    // const getText = getTxt(driver);
+
+    return async (productName) => {
+        await driver.get(URL);
+        const title = await driver.getTitle();
+        if (title !== 'Яндекс.Маркет — выбор и покупка товаров из проверенных интернет-магазинов') {
+            throw Error('Не удалось загрузить страницу Яндекс.Маркет')
+        }
+
+        //выборка из карточек с товаром
+        const searchInput = await driver.wait(until.elementLocated(By.css('#header-search')), 20000);
+        searchInput.sendKeys(productName + Key.ENTER);
+        await driver.wait(until.elementLocated(By.css('.n-snippet-list')), 20000);
+        const productCardsSnippet = await selectAll('.n-snippet-card2 .n-snippet-card2__title a');
+        const productCardsCell = await selectAll('.n-snippet-cell2 .n-snippet-cell2__title a');
+        const productCards = productCardsSnippet.concat(productCardsCell);
+        const filteredCards = await filterSeries(productCards, async card => {
+            const name = await card.getText();
+
+            return ~name.toLowerCase().indexOf(productName.toLowerCase());
+        });
+        if (filteredCards.length === 0) {
+            addRowToCsv(productName);
+            return []
+        }
+        const productLink = await filteredCards[0].getAttribute('href');
+
+        //Получение ссылки на страницу товара
+        let allProductHref;
+        await driver.get(productLink);
+        try {
+            const allProductLink = await select('.n-product-tabs__item_name_offers a');
+             allProductHref = await allProductLink.getAttribute('href');
+        } catch (e) {
+            addRowToCsv(productName + ';;' + 'не удалось получить ссылку на товар ' + productLink + ' err: ' + e);
+            return []
+        }
+
+        // Получение данных о товаре
+        let cardElements;
+        await driver.get(allProductHref + '&how=aprice');
+        // const linkToSort = await driver.findElement(By.css('.n-filter-sorter a'));
+        // await linkToSort.click();
+        try {
+           cardElements = await selectAll('.n-snippet-card');
+        } catch (e) {
+            addRowToCsv(productName + ';;' + 'не удалось получить карточки продавцов ' + ' err: ' + e)
+        }
+        const productsInfo = await mapSeries(cardElements, async card => {
+            let data;
+            try {
+                const dataString = await card.getAttribute('data-bem');
+                data = parseData(dataString);
+            } catch (e) {
+                data.price = null;
+                data.description = 'не удалось получить цену ' + ' err: ' + e
             }
-            op = body.call(thisArg, _);
-        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+            try {
+                const offerElement = await card.findElement(By.css('.n-snippet-card__shop-primary-info  a'));
+                data.url = await offerElement.getAttribute('href');
+            } catch (e) {
+                data.url = ''
+                data.description = description + '   не удалось получить ссылку на магазин err: ' + e
+            }
+            // const elemWithTitle = await offerElement.findElement(By.css(''))
+            // data.offerName = await offerElement.getAttribute('title');
+            return data
+        });
+        productsInfo.forEach(data => {
+            addRowToCsv(productName + ';' + data.price + ';' + data.url)
+        });
+        return productsInfo
     }
 };
-exports.__esModule = true;
-var selenium_webdriver_1 = require("selenium-webdriver");
-var URL = 'https://market.yandex.ru/';
-function getProductInfo(driver) {
-    return __awaiter(this, void 0, void 0, function () {
-        var _this = this;
-        return __generator(this, function (_a) {
-            return [2 /*return*/, function (productName) { return __awaiter(_this, void 0, void 0, function () {
-                    var title;
-                    return __generator(this, function (_a) {
-                        switch (_a.label) {
-                            case 0: return [4 /*yield*/, driver.get(URL)];
-                            case 1:
-                                _a.sent();
-                                return [4 /*yield*/, driver.getTitle()];
-                            case 2:
-                                title = _a.sent();
-                                if (title !== 'Яндекс.Маркет') {
-                                    throw Error('Не удалось загрузить страницу Яндекс.Маркет');
-                                }
-                                driver.assert(title == 'as', 'не вышло ');
-                                return [2 /*return*/];
-                        }
-                    });
-                }); }];
-        });
-    });
+//FIXME
+// (async function () {
+//     const driver = await new Builder().forBrowser('chrome').build();
+//     try{
+//         const getProductPage = await getProductInfo(driver);
+//         const res =await getProductPage('Haier AS12CB3HRA')
+//     }finally {
+//         driver.quit()
+//     }
+//     // const data = '{"shop-history":{"offer-id":"sur-FpZwIOEIWCFmqaqA5w","currency":"RUR","gate":"","isRecommended":"","clickParams":{"event":"clickout","goodid":"sur-FpZwIOEIWCFmqaqA5w","goodbrand":240936,"productid":"","store":37896,"price":"77300","categoryId":90578}},"n-snippet-card":{"type":"offer","clickActionType":"details"},"b-zone":{"name":"snippet-card","data":{"isCpa20":false,"id":"sur-FpZwIOEIWCFmqaqA5w","isAutoCalculatedDelivery":false}}}\n'
+//     // const parse = parseData(data);
+//     console.log('ok')
+//
+// })();
+/**
+ * return function for search all elements from css-selector on page
+ * @param driver
+ * @returns {function(*=)}
+ */
+function findAll(driver) {
+    return async (selector) =>
+        await driver.findElements(By.css(selector));
 }
-exports.getProductInfo = getProductInfo;
-(function () {
-    return __awaiter(this, void 0, void 0, function () {
-        var driver;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0: return [4 /*yield*/, new selenium_webdriver_1.Builder().forBrowser('chrome').build()];
-                case 1:
-                    driver = _a.sent();
-                    driver.get(URL);
-                    return [2 /*return*/];
-            }
-        });
-    });
-})();
-console.log('asdfasdf');
+
+function find(driver) {
+    return async (selector) => await driver.findElement(By.css(selector))
+}
+
+function getAttr(driver) {
+    return async function ({selector, attrName}) {
+        const elem = await driver.select(selector);
+        return elem.getAttribute(attrName)
+    }
+}
+
+function getTxt(driver) {
+    return async function (selector) {
+        const elem = await driver.select(selector);
+        return elem.getText()
+    }
+}
+
+function parseData(data) {
+    const dataJson = JSON.parse(data);
+    return {
+        price: +dataJson['shop-history'].clickParams.price,
+        currency: dataJson['shop-history'].currency,
+        offerName: '',
+        url: '',
+        description: ''
+    }
+}
